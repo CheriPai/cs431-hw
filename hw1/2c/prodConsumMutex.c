@@ -38,7 +38,10 @@ void *producer() {
         buffer[ifull] = item;
         sem_post(&mutex);
         sem_post(&full);
-        if(ifull+1 == 99) {
+
+        // Print message if buffer is full
+        sem_getvalue(&full, &ifull);
+        if(ifull+1 == N) {
             printf("Buffer full\n");
         }
     }
@@ -57,9 +60,13 @@ void *consumer() {
         item = buffer[iempty];
         sem_post(&mutex);
         sem_post(&empty);
-        if(iempty+1 == 99) {
+
+        // Print message if buffer is empty
+        sem_getvalue(&empty, &iempty);
+        if(iempty+1 == N-1) {
             printf("Buffer empty\n");
         }
+
         consume_item(item);
     }
 }
