@@ -9,16 +9,19 @@ int count = 0;                  // Current buffer size
 int buffer[N];                  // Buffer shared by producer and consumer
 
 
+// Produces an item by returning a random integer
 int produce_item() {
     return rand();
 }
 
 
+// Dummy function used to "consume" items in buffer
 void consume_item(int item) {
     return;
 }
 
 
+// Produces items until buffer is full
 void producer() {
     int item;
 
@@ -32,6 +35,7 @@ void producer() {
 }
 
 
+// Consumers items until buffer is empty
 void consumer() {
     int item;
 
@@ -46,7 +50,10 @@ void consumer() {
 
 
 int main() {
+    // Generate seed for RNG in produce_item()
     srand(time(NULL));
+
+    // Runs producer consumer cycle for 10 iterations
     for(int i = 0; i < 10; ++i) {
         printf("Buffer empty. Staring producer\n");
         producer();
