@@ -48,7 +48,7 @@ void *producer() {
 }
 
 
-// Consumers items
+// Consumes items
 void *consumer() {
     int item;
     int iempty;
