@@ -52,18 +52,19 @@ void *producer() {
 void *consumer() {
     int item;
     int iempty;
+    int ifull;
 
     while(true) {
         sem_wait(&full);
         sem_wait(&mutex);
-        sem_getvalue(&empty, &iempty);
-        item = buffer[iempty];
+        sem_getvalue(&full, &ifull);
+        item = buffer[ifull];
         sem_post(&mutex);
         sem_post(&empty);
 
         // Print message if buffer is empty
         sem_getvalue(&empty, &iempty);
-        if(iempty+1 == N-1) {
+        if(iempty+1 == N) {
             printf("Buffer empty\n");
         }
 
