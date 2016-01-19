@@ -30,10 +30,12 @@ void *producer() {
     while(true) {
         item = produce_item();
         pthread_mutex_lock(&count_mutex);
-        if(count < N)
+        if(count < N) {
         	buffer[count++] = item;
-        else
+        }
+        else {
         	printf("Buffer full\n");
+        }
         pthread_mutex_unlock(&count_mutex);
     }
 }
@@ -45,11 +47,11 @@ void *consumer() {
  
     while(true) {
         pthread_mutex_lock(&count_mutex);
-        if(count > 0){
+        if(count > 0) {
         	item = buffer[--count];
         	consume_item(item);
         }
-        else{
+        else {
         	printf("Buffer empty\n");
         }
 	    pthread_mutex_unlock(&count_mutex);
