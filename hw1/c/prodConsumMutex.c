@@ -1,5 +1,4 @@
 #include <pthread.h>
-#include <semaphore.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,9 +6,8 @@
 
 
 #define N 100                   // Maximum buffer size
-sem_t mutex;                    // Controls access to critical region
-sem_t empty;                    // Counts empty buffer slots
-sem_t full;                     // Counts full buffer slots
+pthread_mutex_t count_mutex;	// Locks the counter
+int count;						// Array Position/Counter
 int buffer[N];                  // Buffer shared by producer and consumer
 
 
@@ -28,22 +26,15 @@ void consume_item(int item) {
 // Produces items
 void *producer() {
     int item;
-    int ifull;
     
     while(true) {
         item = produce_item();
-        sem_wait(&empty);
-        sem_wait(&mutex);
-        sem_getvalue(&full, &ifull);
-        buffer[ifull] = item;
-        sem_post(&mutex);
-        sem_post(&full);
-
-        // Print message if buffer is full
-        sem_getvalue(&full, &ifull);
-        if(ifull+1 == N) {
-            printf("Buffer full\n");
-        }
+        pthread_mutex_lock(&count_mutex);
+        if(count < N)
+        	buffer[count++] = item;
+        else
+        	printf("Buffer full\n");
+        pthread_mutex_unlock(&count_mutex);
     }
 }
 
@@ -51,23 +42,17 @@ void *producer() {
 // Consumes items
 void *consumer() {
     int item;
-    int iempty;
-
+ 
     while(true) {
-        sem_wait(&full);
-        sem_wait(&mutex);
-        sem_getvalue(&empty, &iempty);
-        item = buffer[iempty];
-        sem_post(&mutex);
-        sem_post(&empty);
-
-        // Print message if buffer is empty
-        sem_getvalue(&empty, &iempty);
-        if(iempty+1 == N-1) {
-            printf("Buffer empty\n");
+        pthread_mutex_lock(&count_mutex);
+        if(count > 0){
+        	item = buffer[--count];
+        	consume_item(item);
         }
-
-        consume_item(item);
+        else{
+        	printf("Buffer empty\n");
+        }
+	    pthread_mutex_unlock(&count_mutex);
     }
 }
 
@@ -75,10 +60,10 @@ void *consumer() {
 int main() {
     int iret1, iret2;
 
-    // Initialize semaphore values
-    sem_init(&mutex, 0, 1);
-    sem_init(&empty, 0, N);
-    sem_init(&full, 0, 0);
+    count = 0;
+
+    // Initialize Mutex with default attributes
+   	pthread_mutex_init(&count_mutex, NULL);
 
     // Generate seed for RNG in produce_item()
     srand(time(NULL));
