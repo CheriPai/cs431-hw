@@ -107,6 +107,7 @@ void *consumer(void *sizes) {
 }
 
 
+// Prints status of buffers every 1000 items produced
 void *bufferPrinter(void *sizes) {
     int production;
     int produced;
@@ -197,10 +198,6 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    // ---------------------------------------------
-    // FIXME: Add thread for checking items produced
-    // ---------------------------------------------
-
     // Join producer threads
     for(int i = 0; i < numProducers; ++i) {
         pthread_join(producerThread[i], NULL);
@@ -211,6 +208,7 @@ int main(int argc, char **argv) {
         pthread_join(consumerThread[i], NULL);
     }
 
+    // Join buffer printer thread
     pthread_join(bufferPrinterThread, NULL);
 
     // Free up dynamically allocated memory
