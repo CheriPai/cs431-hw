@@ -20,6 +20,7 @@ sem_t totalProduced;
 struct Sizes {
     int numBuffers;
     int numItems;
+    int id;
 };
 
 
@@ -51,8 +52,7 @@ void *producer(void *sizes) {
     while(true) {
         sem_getvalue(&totalProduced, &produced);
         if(produced >= s->numItems) {
-            // FIXME: PASS thread number through struct
-            printf("Producer Thread %d is finished\n", 0);
+            printf("Producer Thread %d is finished\n", s->id);
             return NULL;
         }
         sem_wait(&maxProduction);
@@ -99,8 +99,7 @@ void *consumer(void *sizes) {
         // FIXME: Check if the bufferprinter is still running
         // instead of checking if numItems items has been created
         if(produced >= s->numItems && totalFull == 0) {
-            // FIXME: PASS thread number through struct
-            printf("Consumer Thread %d is finished\n", 0);
+            printf("Consumer Thread %d is finished\n", s->id);
             return NULL;
         }
     }
@@ -118,7 +117,9 @@ void *bufferPrinter(void *sizes) {
         if(production == 0) {
             printf("1000 items created\n");
             for(int i = 0; i < s->numBuffers; ++i) {
-                printf("SharedBuffer%d has %d items\n", i, full[i]);
+                int items;
+                sem_getvalue(&full[i], &items);
+                printf("SharedBuffer%d has %d items\n", i, items);
             }
             if(produced >= s->numItems) {
                 return NULL;
@@ -145,9 +146,8 @@ int main(int argc, char **argv) {
     int numItems = (int) strtol(argv[4], NULL, 10);
 
     // Initialize struct to pass to threads
-    struct Sizes s;
-    s.numBuffers = numBuffers;
-    s.numItems = numItems;
+    struct Sizes *producerSizes = malloc(numProducers * sizeof(struct Sizes));
+    struct Sizes *consumerSizes = malloc(numConsumers * sizeof(struct Sizes));
 
     // Initialize mutex, empty, and full for each buffer
     mutex = malloc(numBuffers * sizeof(sem_t));
@@ -173,9 +173,21 @@ int main(int argc, char **argv) {
     // Generate seed for RNG in produce_item()
     srand(time(NULL));
 
+    // Initializes parameter structs for producer and consumer threads
+    for(int i = 0; i < numProducers; ++i) {
+        producerSizes[i].numBuffers = numBuffers;
+        producerSizes[i].numItems = numItems;
+        producerSizes[i].id = i;
+    }
+    for(int i = 0; i < numConsumers; ++i) {
+        consumerSizes[i].numBuffers = numBuffers;
+        consumerSizes[i].numItems = numItems;
+        consumerSizes[i].id = i;
+    }
+
     // Create threads for producers
     for(int i = 0; i < numProducers; ++i) {
-        int ret = pthread_create(&producerThread[i], NULL, producer, &s);
+        int ret = pthread_create(&producerThread[i], NULL, producer, &producerSizes[i]);
         if(ret) {
             fprintf(stderr,"Error - pthread_create() return code: %d\n", ret);
             exit(EXIT_FAILURE);
@@ -184,12 +196,17 @@ int main(int argc, char **argv) {
 
     // Create threads for consumers
     for(int i = 0; i < numConsumers; ++i) {
-        int ret = pthread_create(&consumerThread[i], NULL, consumer, &s);
+        int ret = pthread_create(&consumerThread[i], NULL, consumer, &consumerSizes[i]);
         if(ret) {
             fprintf(stderr,"Error - pthread_create() return code: %d\n", ret);
             exit(EXIT_FAILURE);
         }
     }
+
+    // Initialize parameters for buffer printer thread
+    struct Sizes s;
+    s.numBuffers = numBuffers;
+    s.numItems = numItems;
 
     // Create thread for buffer printer
     int ret = pthread_create(&bufferPrinterThread, NULL, bufferPrinter, &s);
@@ -217,6 +234,8 @@ int main(int argc, char **argv) {
     free(full);
     free(producerThread);
     free(consumerThread);
+    free(producerSizes);
+    free(consumerSizes);
     for(int i = 0; i < numBuffers; ++i) {
         free(buffer[i]);
     }
