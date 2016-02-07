@@ -12,8 +12,8 @@ sem_t *mutex;                         // Controls access to critical region
 sem_t *empty;                         // Counts empty buffer slots
 sem_t *full;                          // Counts full buffer slots
 int **buffer;                         // Buffer shared by producer and consumer
-int itemsProduced = 0;
-sem_t itemsProducedMutex;
+sem_t maxProduction;
+sem_t totalProduced;
 
 
 // Holds parameters passed to producer and consumer function
@@ -25,9 +25,7 @@ struct Sizes {
 
 // Produces an item by returning a random integer
 int produce_item() {
-    sem_wait(&itemsProducedMutex); 
-    ++itemsProduced;
-    sem_post(&itemsProducedMutex);
+    sem_post(&totalProduced);
     return rand();
 }
 
@@ -42,27 +40,29 @@ void consume_item(int item) {
 void *producer(void *sizes) {
     int item;
     int ifull;
+    int produced;
     struct Sizes *s = (struct Sizes *) sizes;
     // ---------------------------------------------------
     // FIXME: Figure out how to choose which buffer to use
     // ---------------------------------------------------
-    int i = 0;
+    int bufferIndex = 0;
 
     
     while(true) {
-        item = produce_item();
-        sem_wait(&empty[i]);
-        sem_wait(&mutex[i]);
-        sem_getvalue(&full[i], &ifull);
-        buffer[i][ifull] = item;
-        sem_post(&mutex[i]);
-        sem_post(&full[i]);
-
-        // Print message if buffer is full
-        sem_getvalue(&full[i], &ifull);
-        if(ifull+1 == MAX_BUFFER_SIZE) {
-            printf("Buffer full\n");
+        sem_getvalue(&totalProduced, &produced);
+        if(produced >= s->numItems) {
+            // FIXME: PASS thread number through struct
+            printf("Producer Thread %d is finished\n", 0);
+            return NULL;
         }
+        sem_wait(&maxProduction);
+        item = produce_item();
+        sem_wait(&empty[bufferIndex]);
+        sem_wait(&mutex[bufferIndex]);
+        sem_getvalue(&full[bufferIndex], &ifull);
+        buffer[bufferIndex][ifull] = item;
+        sem_post(&mutex[bufferIndex]);
+        sem_post(&full[bufferIndex]);
     }
 }
 
@@ -70,29 +70,62 @@ void *producer(void *sizes) {
 // Consumes items
 void *consumer(void *sizes) {
     int item;
-    int iempty;
     int ifull;
+    int totalFull;
+    int produced;
     struct Sizes *s = (struct Sizes *) sizes;
     // ---------------------------------------------------
     // FIXME: Figure out how to choose which buffer to use
     // ---------------------------------------------------
-    int i = 0;
+    int bufferIndex = 0;
 
+    // FIXME: Add yielding statement
     while(true) {
-        sem_wait(&full[i]);
-        sem_wait(&mutex[i]);
-        sem_getvalue(&full[i], &ifull);
-        item = buffer[i][ifull];
-        sem_post(&mutex[i]);
-        sem_post(&empty[i]);
+        totalFull = 0;
+        sem_wait(&full[bufferIndex]);
+        sem_wait(&mutex[bufferIndex]);
+        sem_getvalue(&full[bufferIndex], &ifull);
+        item = buffer[bufferIndex][ifull];
+        sem_post(&mutex[bufferIndex]);
+        sem_post(&empty[bufferIndex]);
+        consume_item(item);
 
-        // Print message if buffer is empty
-        sem_getvalue(&empty[i], &iempty);
-        if(iempty+1 == MAX_BUFFER_SIZE) {
-            printf("Buffer empty\n");
+        for(int i = 0; i < s->numBuffers; ++i) {
+            sem_getvalue(&full[i], &ifull);
+            totalFull += ifull;
         }
 
-        consume_item(item);
+        sem_getvalue(&totalProduced, &produced);
+        // FIXME: Check if the bufferprinter is still running
+        // instead of checking if numItems items has been created
+        if(produced >= s->numItems && totalFull == 0) {
+            // FIXME: PASS thread number through struct
+            printf("Consumer Thread %d is finished\n", 0);
+            return NULL;
+        }
+    }
+}
+
+
+void *bufferPrinter(void *sizes) {
+    int production;
+    int produced;
+    struct Sizes *s = (struct Sizes *) sizes;
+    while(true) {
+        sem_getvalue(&maxProduction, &production);
+        sem_getvalue(&totalProduced, &produced);
+        if(production == 0) {
+            printf("1000 items created\n");
+            for(int i = 0; i < s->numBuffers; ++i) {
+                printf("SharedBuffer%d has %d items\n", i, full[i]);
+            }
+            if(produced >= s->numItems) {
+                return NULL;
+            }
+            for(int i = 0; i < 1000; ++i) {
+                sem_post(&maxProduction);
+            }
+        }
     }
 }
 
@@ -122,7 +155,8 @@ int main(int argc, char **argv) {
     buffer = malloc(numBuffers * sizeof(int *)); 
 
     // Initialize buffer and semaphore values
-    sem_init(&itemsProducedMutex, 0, 1);
+    sem_init(&maxProduction, 0, 1000);
+    sem_init(&totalProduced, 0, 0);
     for(int i = 0; i < numBuffers; ++i) {
         buffer[i] = malloc(MAX_BUFFER_SIZE * sizeof(int));
         sem_init(&mutex[i], 0, 1);
@@ -133,6 +167,7 @@ int main(int argc, char **argv) {
     // Initialize thread arrays
     pthread_t *producerThread = malloc(numProducers * sizeof(pthread_t));
     pthread_t *consumerThread = malloc(numConsumers * sizeof(pthread_t));
+    pthread_t bufferPrinterThread;
 
     // Generate seed for RNG in produce_item()
     srand(time(NULL));
@@ -155,6 +190,13 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Create thread for buffer printer
+    int ret = pthread_create(&bufferPrinterThread, NULL, bufferPrinter, &s);
+    if(ret) {
+        fprintf(stderr,"Error - pthread_create() return code: %d\n", ret);
+        exit(EXIT_FAILURE);
+    }
+
     // ---------------------------------------------
     // FIXME: Add thread for checking items produced
     // ---------------------------------------------
@@ -168,6 +210,8 @@ int main(int argc, char **argv) {
     for(int i = 0; i < numConsumers; ++i) {
         pthread_join(consumerThread[i], NULL);
     }
+
+    pthread_join(bufferPrinterThread, NULL);
 
     // Free up dynamically allocated memory
     free(mutex);
