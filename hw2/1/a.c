@@ -14,6 +14,7 @@ sem_t *full;                          // Counts full buffer slots
 int **buffer;                         // Buffer shared by producer and consumer
 sem_t maxProduction;
 sem_t totalProduced;
+sem_t bufferPrinterTerminated;
 
 
 // Holds parameters passed to producer and consumer function
@@ -26,7 +27,6 @@ struct Sizes {
 
 // Produces an item by returning a random integer
 int produce_item() {
-    sem_post(&totalProduced);
     return rand();
 }
 
@@ -61,6 +61,7 @@ void *producer(void *sizes) {
         sem_wait(&mutex[bufferIndex]);
         sem_getvalue(&full[bufferIndex], &ifull);
         buffer[bufferIndex][ifull] = item;
+        sem_post(&totalProduced);
         sem_post(&mutex[bufferIndex]);
         sem_post(&full[bufferIndex]);
     }
@@ -95,10 +96,10 @@ void *consumer(void *sizes) {
             totalFull += ifull;
         }
 
+        int terminated;
         sem_getvalue(&totalProduced, &produced);
-        // FIXME: Check if the bufferprinter is still running
-        // instead of checking if numItems items has been created
-        if(produced >= s->numItems && totalFull == 0) {
+        sem_getvalue(&bufferPrinterTerminated, &terminated);
+        if(terminated == 1 && totalFull == 0) {
             printf("Consumer Thread %d is finished\n", s->id);
             return NULL;
         }
@@ -112,6 +113,7 @@ void *bufferPrinter(void *sizes) {
     int produced;
     struct Sizes *s = (struct Sizes *) sizes;
     while(true) {
+        printf("B ");
         sem_getvalue(&maxProduction, &production);
         sem_getvalue(&totalProduced, &produced);
         if(production == 0) {
@@ -121,12 +123,16 @@ void *bufferPrinter(void *sizes) {
                 sem_getvalue(&full[i], &items);
                 printf("SharedBuffer%d has %d items\n", i, items);
             }
-            if(produced >= s->numItems) {
-                return NULL;
-            }
             for(int i = 0; i < 1000; ++i) {
+                // FIXME: THIS IS WHERE THE ERROR IS
+                // Sometimes, it has trouble calling post so many times
+                // Probably need to replace this with an integer
                 sem_post(&maxProduction);
             }
+        }
+        if(produced >= s->numItems) {
+            sem_post(&bufferPrinterTerminated);
+            return NULL;
         }
     }
 }
@@ -158,6 +164,7 @@ int main(int argc, char **argv) {
     // Initialize buffer and semaphore values
     sem_init(&maxProduction, 0, 1000);
     sem_init(&totalProduced, 0, 0);
+    sem_init(&bufferPrinterTerminated, 0, 0);
     for(int i = 0; i < numBuffers; ++i) {
         buffer[i] = malloc(MAX_BUFFER_SIZE * sizeof(int));
         sem_init(&mutex[i], 0, 1);
