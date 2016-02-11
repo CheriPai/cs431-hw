@@ -37,26 +37,45 @@ void consume_item(int item) {
 }
 
 
+int getLargestBufferIndex(sem_t *b, int numBuffers) {
+    int max = 0;
+    int index = 0;
+    for(int i = 0; i < numBuffers; ++i) {
+        int v;
+        sem_getvalue(&b[i], &v);
+        if(v > max) {
+            max = v;
+            index = i;
+        }
+    }
+    return index;
+}
+
+
 // Produces items
 void *producer(void *sizes) {
     int item;
     int ifull;
     int produced;
     struct Sizes *s = (struct Sizes *) sizes;
-    // ---------------------------------------------------
-    // FIXME: Figure out how to choose which buffer to use
-    // ---------------------------------------------------
-    int bufferIndex = 0;
+    int bufferIndex;
 
     
     while(true) {
+        // Stop thread if we have produced the desired amount
         sem_getvalue(&totalProduced, &produced);
         if(produced >= s->numItems) {
             printf("Producer Thread %d is finished\n", s->id);
             return NULL;
         }
+
+        // Choose the emptiest buffer
+        bufferIndex = getLargestBufferIndex(empty, s->numBuffers);
+
+        // Wait if we have produced 1000 items
         sem_wait(&maxProduction);
         item = produce_item();
+
         sem_wait(&empty[bufferIndex]);
         sem_wait(&mutex[bufferIndex]);
         sem_getvalue(&full[bufferIndex], &ifull);
@@ -75,14 +94,13 @@ void *consumer(void *sizes) {
     int totalFull;
     int produced;
     struct Sizes *s = (struct Sizes *) sizes;
-    // ---------------------------------------------------
-    // FIXME: Figure out how to choose which buffer to use
-    // ---------------------------------------------------
-    int bufferIndex = 0;
+    int bufferIndex;
 
     // FIXME: Add yielding statement
     while(true) {
-        totalFull = 0;
+        // Choose the fullest buffer
+        bufferIndex = getLargestBufferIndex(full, s->numBuffers);
+
         sem_wait(&full[bufferIndex]);
         sem_wait(&mutex[bufferIndex]);
         sem_getvalue(&full[bufferIndex], &ifull);
@@ -91,6 +109,8 @@ void *consumer(void *sizes) {
         sem_post(&empty[bufferIndex]);
         consume_item(item);
 
+        // Calculate the total amount of items in all buffers
+        totalFull = 0;
         for(int i = 0; i < s->numBuffers; ++i) {
             sem_getvalue(&full[i], &ifull);
             totalFull += ifull;
@@ -113,7 +133,6 @@ void *bufferPrinter(void *sizes) {
     int produced;
     struct Sizes *s = (struct Sizes *) sizes;
     while(true) {
-        printf("B ");
         sem_getvalue(&maxProduction, &production);
         sem_getvalue(&totalProduced, &produced);
         if(production == 0) {
