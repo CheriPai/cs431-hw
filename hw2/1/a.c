@@ -76,14 +76,13 @@ void *producer(void *sizes) {
         sem_wait(&maxProduction);
         item = produce_item();
 
-        if(sem_trywait(&empty[bufferIndex]) == 0) {
-            sem_wait(&mutex[bufferIndex]);
-            sem_getvalue(&full[bufferIndex], &ifull);
-            buffer[bufferIndex][ifull] = item;
-            sem_post(&totalProduced);
-            sem_post(&mutex[bufferIndex]);
-            sem_post(&full[bufferIndex]);
-        }
+        sem_wait(&empty[bufferIndex]);
+        sem_wait(&mutex[bufferIndex]);
+        sem_getvalue(&full[bufferIndex], &ifull);
+        buffer[bufferIndex][ifull] = item;
+        sem_post(&totalProduced);
+        sem_post(&mutex[bufferIndex]);
+        sem_post(&full[bufferIndex]);
     }
 }
 
@@ -145,14 +144,14 @@ void *bufferPrinter(void *sizes) {
                 sem_getvalue(&full[i], &items);
                 printf("SharedBuffer%d has %d items\n", i, items);
             }
+            for(int i = 0; i < 1000; ++i) {
+                sem_post(&maxProduction);
+            }
             if(produced >= s->numItems) {
                 // FIXME: Remove print statement
                 sem_post(&bufferPrinterTerminated);
                 printf("Buffer printer is finished\n");
                 return NULL;
-            }
-            for(int i = 0; i < 1000; ++i) {
-                sem_post(&maxProduction);
             }
         }
     }
