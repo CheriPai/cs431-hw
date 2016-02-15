@@ -76,13 +76,14 @@ void *producer(void *sizes) {
         sem_wait(&maxProduction);
         item = produce_item();
 
-        sem_wait(&empty[bufferIndex]);
-        sem_wait(&mutex[bufferIndex]);
-        sem_getvalue(&full[bufferIndex], &ifull);
-        buffer[bufferIndex][ifull] = item;
-        sem_post(&totalProduced);
-        sem_post(&mutex[bufferIndex]);
-        sem_post(&full[bufferIndex]);
+        if(sem_trywait(&empty[bufferIndex]) == 0) {
+            sem_wait(&mutex[bufferIndex]);
+            sem_getvalue(&full[bufferIndex], &ifull);
+            buffer[bufferIndex][ifull] = item;
+            sem_post(&totalProduced);
+            sem_post(&mutex[bufferIndex]);
+            sem_post(&full[bufferIndex]);
+        }
     }
 }
 
@@ -96,19 +97,13 @@ void *consumer(void *sizes) {
     struct Sizes *s = (struct Sizes *) sizes;
     int bufferIndex;
 
-    // FIXME: Add yielding statement
     while(true) {
         // Choose the fullest buffer
         bufferIndex = getLargestBufferIndex(full, s->numBuffers);
 
-        sem_wait(&full[bufferIndex]);
-        sem_wait(&mutex[bufferIndex]);
+        int terminated;
+        sem_getvalue(&bufferPrinterTerminated, &terminated);
         sem_getvalue(&full[bufferIndex], &ifull);
-        item = buffer[bufferIndex][ifull];
-        sem_post(&mutex[bufferIndex]);
-        sem_post(&empty[bufferIndex]);
-        consume_item(item);
-
         // Calculate the total amount of items in all buffers
         totalFull = 0;
         for(int i = 0; i < s->numBuffers; ++i) {
@@ -116,12 +111,20 @@ void *consumer(void *sizes) {
             totalFull += ifull;
         }
 
-        int terminated;
         sem_getvalue(&totalProduced, &produced);
-        sem_getvalue(&bufferPrinterTerminated, &terminated);
-        if(terminated == 1 && totalFull == 0) {
+        if(terminated && totalFull == 0) {
             printf("Consumer Thread %d is finished\n", s->id);
             return NULL;
+        } else if(totalFull == 0) {
+            printf("Consumer Thread %d is yielding\n", s->id);
+        }
+        if(sem_trywait(&full[bufferIndex]) == 0) {
+            sem_wait(&mutex[bufferIndex]);
+            sem_getvalue(&full[bufferIndex], &ifull);
+            item = buffer[bufferIndex][ifull];
+            sem_post(&mutex[bufferIndex]);
+            sem_post(&empty[bufferIndex]);
+            consume_item(item);
         }
     }
 }
@@ -135,23 +138,22 @@ void *bufferPrinter(void *sizes) {
     while(true) {
         sem_getvalue(&maxProduction, &production);
         sem_getvalue(&totalProduced, &produced);
-        if(production == 0) {
-            printf("1000 items created\n");
+        if(produced % 1000 == 0) {
+            printf("%d items created\n", produced);
             for(int i = 0; i < s->numBuffers; ++i) {
                 int items;
                 sem_getvalue(&full[i], &items);
                 printf("SharedBuffer%d has %d items\n", i, items);
             }
+            if(produced >= s->numItems) {
+                // FIXME: Remove print statement
+                sem_post(&bufferPrinterTerminated);
+                printf("Buffer printer is finished\n");
+                return NULL;
+            }
             for(int i = 0; i < 1000; ++i) {
-                // FIXME: THIS IS WHERE THE ERROR IS
-                // Sometimes, it has trouble calling post so many times
-                // Probably need to replace this with an integer
                 sem_post(&maxProduction);
             }
-        }
-        if(produced >= s->numItems) {
-            sem_post(&bufferPrinterTerminated);
-            return NULL;
         }
     }
 }
