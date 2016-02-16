@@ -16,6 +16,7 @@ int *empty;                           // Counts empty buffer slots
 int *full;                            // Counts full buffer slots
 int **buffer;                         // Buffer shared by producer and consumer
 int totalProduced;
+int lastProduced = 0;
 bool bufferPrinterTerminated;
 
 
@@ -57,7 +58,6 @@ void *producer(void *sizes) {
     int item;
     struct Sizes *s = (struct Sizes *) sizes;
     int bufferIndex;
-
     
     while(true) {
         // Stop thread if we have produced the desired amount
@@ -71,7 +71,7 @@ void *producer(void *sizes) {
 
         // Wait if we have produced 1000 items
         pthread_mutex_lock(&lock);
-        while(totalProduced % 1000 == 0) {
+        if(totalProduced % 1000 == 0 && totalProduced > 0) {
             pthread_cond_wait(&produced1000, &lock);
         }
 
@@ -87,7 +87,9 @@ void *producer(void *sizes) {
         
         // Change counter values
         ++totalProduced;
+        --empty[bufferIndex];
         ++full[bufferIndex];
+        pthread_cond_broadcast(&buffersEmpty);
         pthread_mutex_unlock(&mutex[bufferIndex]);
         pthread_mutex_unlock(&lock);
     }
@@ -97,34 +99,29 @@ void *producer(void *sizes) {
 // Consumes items
 void *consumer(void *sizes) {
     int item;
-    int totalFull = 0;
-    int produced;
     struct Sizes *s = (struct Sizes *) sizes;
     int bufferIndex;
 
     while(true) {
-        // Calculate the total amount of items in all buffers
-        // wait if all the buffers are empty
-        while(totalFull == 0) {
-            totalFull = 0;
-            pthread_mutex_lock(&lock);
-            for(int i = 0; i < s->numBuffers; ++i) {
-                totalFull += full[i];
-            }
-            if(bufferPrinterTerminated && totalFull == 0) {
+        // Wait if all the buffers are empty
+        pthread_mutex_lock(&lock);
+        bufferIndex = getLargestBufferIndex(full, s->numBuffers);
+        while(full[bufferIndex] == 0) {
+            if(bufferPrinterTerminated) {
                 printf("Consumer Thread %d is finished\n", s->id);
                 return NULL;
-            } else if(totalFull == 0) {
+            } else {
                 printf("Consumer Thread %d is yielding\n", s->id);
-                thread_cond_wait(&buffersEmpty, &lock);
+                pthread_cond_wait(&buffersEmpty, &lock);
             }
+            bufferIndex = getLargestBufferIndex(full, s->numBuffers);
         }
 
-        // Choose the fullest buffer
-        bufferIndex = getLargestBufferIndex(full, s->numBuffers);
         pthread_mutex_lock(&mutex[bufferIndex]);
         item = buffer[bufferIndex][full[bufferIndex]];
-        --empty[bufferIndex];
+        ++empty[bufferIndex];
+        --full[bufferIndex];
+        pthread_cond_broadcast(&buffersFull);
         pthread_mutex_unlock(&mutex[bufferIndex]);
         pthread_mutex_unlock(&lock);
         consume_item(item);
@@ -134,29 +131,26 @@ void *consumer(void *sizes) {
 
 // Prints status of buffers every 1000 items produced
 void *bufferPrinter(void *sizes) {
-    int production;
-    int produced;
     struct Sizes *s = (struct Sizes *) sizes;
     while(true) {
-        sem_getvalue(&maxProduction, &production);
-        sem_getvalue(&totalProduced, &produced);
-        if(produced % 1000 == 0) {
-            printf("%d items created\n", produced);
+        pthread_mutex_lock(&lock);
+        if(totalProduced % 1000 == 0 && totalProduced != lastProduced) {
+            printf("%d items created\n", totalProduced);
             for(int i = 0; i < s->numBuffers; ++i) {
-                int items;
-                sem_getvalue(&full[i], &items);
-                printf("SharedBuffer%d has %d items\n", i, items);
+                printf("SharedBuffer%d has %d items\n", i, full[i]);
             }
-            for(int i = 0; i < 1000; ++i) {
-                sem_post(&maxProduction);
-            }
-            if(produced >= s->numItems) {
-                // FIXME: Remove print statement
-                sem_post(&bufferPrinterTerminated);
-                printf("Buffer printer is finished\n");
-                return NULL;
-            }
+            lastProduced = totalProduced;
+            pthread_cond_broadcast(&produced1000);
         }
+        if(totalProduced >= s->numItems) {
+            // FIXME: Remove print statement
+            bufferPrinterTerminated = true;
+            pthread_cond_broadcast(&buffersEmpty);
+            pthread_mutex_unlock(&lock);
+            printf("Buffer printer is finished\n");
+            return NULL;
+        }
+        pthread_mutex_unlock(&lock);
     }
 }
 
@@ -179,20 +173,16 @@ int main(int argc, char **argv) {
     struct Sizes *consumerSizes = malloc(numConsumers * sizeof(struct Sizes));
 
     // Initialize mutex, empty, and full for each buffer
-    mutex = malloc(numBuffers * sizeof(sem_t));
-    empty = malloc(numBuffers * sizeof(sem_t));
-    full = malloc(numBuffers * sizeof(sem_t));
+    mutex = malloc(numBuffers * sizeof(pthread_mutex_t));
+    empty = malloc(numBuffers * sizeof(int));
+    full = malloc(numBuffers * sizeof(int));
     buffer = malloc(numBuffers * sizeof(int *)); 
 
-    // Initialize buffer and semaphore values
-    sem_init(&maxProduction, 0, 1000);
-    sem_init(&totalProduced, 0, 0);
-    sem_init(&bufferPrinterTerminated, 0, 0);
+    // Initialize buffer and mutex
     for(int i = 0; i < numBuffers; ++i) {
         buffer[i] = malloc(MAX_BUFFER_SIZE * sizeof(int));
-        sem_init(&mutex[i], 0, 1);
-        sem_init(&empty[i], 0, MAX_BUFFER_SIZE);
-        sem_init(&full[i], 0, 0);
+        empty[i] = MAX_BUFFER_SIZE;
+        pthread_mutex_init(&mutex[i], NULL);
     }
 
     // Initialize thread arrays
