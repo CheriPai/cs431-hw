@@ -147,10 +147,10 @@ void *bufferPrinter(void *sizes) {
             for(int i = 0; i < 1000; ++i) {
                 sem_post(&maxProduction);
             }
-            if(produced >= s->numItems) {
-                sem_post(&bufferPrinterTerminated);
-                return NULL;
-            }
+        }
+        if(produced >= s->numItems) {
+            sem_post(&bufferPrinterTerminated);
+            return NULL;
         }
     }
 }
