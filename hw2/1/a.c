@@ -148,9 +148,7 @@ void *bufferPrinter(void *sizes) {
                 sem_post(&maxProduction);
             }
             if(produced >= s->numItems) {
-                // FIXME: Remove print statement
                 sem_post(&bufferPrinterTerminated);
-                printf("Buffer printer is finished\n");
                 return NULL;
             }
         }
