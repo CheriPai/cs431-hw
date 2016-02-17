@@ -1,0 +1,71 @@
+Main	
+	create struct
+		3 semaphores
+			lock - controls access to critical region (binary sempahore)
+			empty - counts empty buffer slots (initially the size of buffer)
+			full - counts full buffer slots (initially 0)
+	create shared memory & store address of shared memory
+	place struct in shared memory
+	start producer program & pass in address of shared memory
+	start consumer program & pass in address of shared memory
+	wait for prod & consum to finish, then free the memory
+
+
+
+Producer
+	attach shared memory
+	Do this:
+
+		// Produces items
+		void *producer() {
+		int item;
+		int ifull;
+
+		while(true) {
+		item = produce_item();
+		sem_wait(&empty);
+		sem_wait(&mutex);
+		sem_getvalue(&full, &ifull);
+		buffer[ifull] = item;
+		sem_post(&mutex);
+		sem_post(&full);
+
+		// Print message if buffer is full
+		sem_getvalue(&full, &ifull);
+		if(ifull+1 == N) {
+		printf("Buffer full\n");
+		}
+		}
+		}
+
+	detach
+
+
+consumer
+	attach shared memory
+	do this:
+// Consumes items
+void *consumer() {
+    int item;
+    int iempty;
+    int ifull;
+
+    while(true) {
+        sem_wait(&full);
+        sem_wait(&mutex);
+        sem_getvalue(&full, &ifull);
+        item = buffer[ifull];
+        sem_post(&mutex);
+        sem_post(&empty);
+
+        // Print message if buffer is empty
+        sem_getvalue(&empty, &iempty);
+        if(iempty+1 == N) {
+            printf("Buffer empty\n");
+        }
+
+        consume_item(item);
+    }
+}
+
+detach shared memory
