@@ -3,8 +3,15 @@ a: a.o
 
 
 a.o: a.c
-	gcc $(CLFAGS) -c a.c
+	gcc $(CLFAGS) -c -g a.c
 
+
+b: b.o
+	gcc $(CFLAGS) -o b b.o -lpthread
+
+
+b.o: b.c
+	gcc $(CLFAGS) -c -g b.c
 
 clean:
-	rm -f *.o a
+	rm -f *.o a b
