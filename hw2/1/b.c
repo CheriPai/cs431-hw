@@ -71,7 +71,8 @@ void *producer(void *sizes) {
 
         // Wait if we have produced 1000 items
         pthread_mutex_lock(&lock);
-        if(totalProduced % 1000 == 0 && totalProduced > 0) {
+        if(totalProduced % 1000 == 0 && totalProduced > 0 && 
+           totalProduced < s->numItems && !bufferPrinterTerminated) {
             pthread_cond_wait(&produced1000, &lock);
         }
 
@@ -109,6 +110,7 @@ void *consumer(void *sizes) {
         while(full[bufferIndex] == 0) {
             if(bufferPrinterTerminated) {
                 printf("Consumer Thread %d is finished\n", s->id);
+                pthread_mutex_unlock(&lock);
                 return NULL;
             } else {
                 printf("Consumer Thread %d is yielding\n", s->id);
