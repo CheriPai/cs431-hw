@@ -17,6 +17,7 @@ int *buffer;
 
 // Produces an item by returning a random integer
 int produce_item() {
+
     return rand();
 }
 
@@ -27,8 +28,8 @@ void producer() {
     int ifull;
     int i = 0;
     
-    while(i < 100) {
-            
+    while(i < 500) {
+        printf("producing\n");
         item = produce_item();
         sem_wait(empty_sem);
         sem_wait(lock_sem);
@@ -42,7 +43,6 @@ void producer() {
         if(ifull+1 == N) {
             printf("Buffer full\n");
         }
-
         i++;
     }
 }
@@ -53,10 +53,10 @@ int main(int argc, char * argv[])
     full_sem = sem_open(FULL_SEM, O_RDWR);
     empty_sem = sem_open(EMPTY_SEM, O_RDWR);
     lock_sem = sem_open(LOCK_SEM, O_RDWR);   //grab the semaphores
+   // printf("%s\n", argv[1]);
     buffer = (int *)shmat(atoi(argv[1]), NULL, 0);
     producer();
-
-    printf("done p");
+    shmdt(buffer);
 
     return 0;
 

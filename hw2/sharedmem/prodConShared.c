@@ -48,7 +48,6 @@ int main()
   }
   else
   {
-      printf("in child, about to exec");
       execvp("./producer", arg_list_p);     
       fprintf(stderr, "An error occured in execvp\n");
       abort();
@@ -60,13 +59,17 @@ int main()
   }
   else
   {
-    execlp("./consumer", argument, NULL);
+    execvp("./consumer", arg_list_c);
     fprintf(stderr, "An error occured in execvp\n");
     abort();
   }
 
 waitpid(producer_pid, &status, WUNTRACED | WCONTINUED);
 waitpid(consumer_pid, &status, WUNTRACED | WCONTINUED);
+
+sem_unlink(FULL_SEM);
+sem_unlink(EMPTY_SEM);
+sem_unlink(LOCK_SEM);
 
   // wait (&status);
   // if (WIFEXITED (status))
