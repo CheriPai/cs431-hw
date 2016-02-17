@@ -145,11 +145,9 @@ void *bufferPrinter(void *sizes) {
             pthread_cond_broadcast(&produced1000);
         }
         if(totalProduced >= s->numItems) {
-            // FIXME: Remove print statement
             bufferPrinterTerminated = true;
             pthread_cond_broadcast(&buffersEmpty);
             pthread_mutex_unlock(&lock);
-            printf("Buffer printer is finished\n");
             return NULL;
         }
         pthread_mutex_unlock(&lock);
