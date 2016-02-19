@@ -14,9 +14,9 @@ clean:
 
 # These targets take care of the compilation process.
 prodCon: 
-	gcc -c prodConShared.c
+	gcc -c -g prodConShared.c
 	gcc -o prodConShared prodConShared.c -lpthread -lm
 	gcc -c consumer.c
 	gcc -o consumer consumer.c -lpthread
-	gcc -c producer.c
+	gcc -c -g producer.c
 	gcc -o producer producer.c -lpthread
