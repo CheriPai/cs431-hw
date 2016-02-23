@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sched.h>
 #include <time.h>
 
 
@@ -29,14 +30,16 @@ void *producer() {
     
     while(true) {
         item = produce_item();
-        pthread_mutex_lock(&count_mutex);
+        
         if(count < N) {
+            pthread_mutex_lock(&count_mutex);
         	buffer[count++] = item;
+            pthread_mutex_unlock(&count_mutex);
+        }else{
+            printf("Buffer Full\n");
+            sched_yield();
         }
-        else {
-        	printf("Buffer full\n");
-        }
-        pthread_mutex_unlock(&count_mutex);
+        
     }
 }
 
@@ -46,15 +49,17 @@ void *consumer() {
     int item;
  
     while(true) {
-        pthread_mutex_lock(&count_mutex);
+        
         if(count > 0) {
+            pthread_mutex_lock(&count_mutex);
         	item = buffer[--count];
         	consume_item(item);
-        }
-        else {
+            pthread_mutex_unlock(&count_mutex);
+        }else {
         	printf("Buffer empty\n");
+            sched_yield();
         }
-	    pthread_mutex_unlock(&count_mutex);
+	    
     }
 }
 

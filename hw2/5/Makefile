@@ -6,17 +6,17 @@
 
 .PHONY: clean all tarball
 
-all: prodCon
+all: sockets
 
 clean:
-	rm -f consumer producer prodConShared
+	rm -f consumer producer server
 	rm -f *.o
 
 # These targets take care of the compilation process.
-prodCon: 
-	gcc -c prodConShared.c
-	gcc -o prodConShared prodConShared.c -lpthread -lm
-	gcc -c consumer.c
-	gcc -o consumer consumer.c -lpthread
+sockets: 
+	gcc -c server.c
+	gcc -o server server.c -lpthread
 	gcc -c producer.c
-	gcc -o producer producer.c -lpthread
+	gcc -o producer producer.c
+	gcc -c consumer.c
+	gcc -o consumer consumer.c

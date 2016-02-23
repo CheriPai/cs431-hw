@@ -17,7 +17,6 @@ int *buffer;
 
 // Produces an item by returning a random integer
 int produce_item() {
-
     return rand();
 }
 
@@ -29,7 +28,6 @@ void producer() {
     int i = 0;
     
     while(i < 500) {
-        printf("producing\n");
         item = produce_item();
         sem_wait(empty_sem);
         sem_wait(lock_sem);
